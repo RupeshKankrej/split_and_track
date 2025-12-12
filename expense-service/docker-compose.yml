@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # Service 1: The Database
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: splitwise-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password  # Simple password for dev
+      POSTGRES_DB: splittracker
+    ports:
+      - "5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - split-network
+
+  # Service 2: The Spring Boot Backend
+  backend-app:
+    build: .             # Build from the Dockerfile in current directory
+    container_name: splitwise-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres-db      # Wait for DB to start
+    environment:
+      # OVERRIDE application.properties settings for Docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/splittracker
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    networks:
+      - split-network
+
+volumes:
+  db-data: # Persist DB data even if container is deleted
+
+networks:
+  split-network:
+    driver: bridge

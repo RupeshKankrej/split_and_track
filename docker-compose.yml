@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # 1. Database (Shared for now)
+  postgres:
+    image: postgres:15-alpine
+    container_name: splittracker-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=splittracker
+    networks:
+      - split-network
+
+  # 2. Service Registry (Eureka)
+  service-registry:
+    build: ./service-registry
+    container_name: service-registry
+    ports:
+      - "8761:8761"
+    networks:
+      - split-network
+
+  # 3. Identity Service
+  identity-service:
+    build: ./identity-service
+    container_name: identity-service
+    ports:
+      - "8081:8081"
+    environment:
+      # Override localhost with container names
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/splittracker
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-registry:8761/eureka/
+      - SPRING_MAIL_USERNAME=rupeshrk1206@gmail.com # Ensure these are set if not in application.yml
+      - SPRING_MAIL_PASSWORD=abcd1234efgh5678
+    depends_on:
+      - postgres
+      - service-registry
+    networks:
+      - split-network
+
+  # 4. Expense Service
+  expense-service:
+    build: ./expense-service
+    container_name: expense-service
+    ports:
+      - "8082:8082"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-registry:8761/eureka/
+      # If you separate DBs later, change URL here
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/splittracker 
+    depends_on:
+      - postgres
+      - service-registry
+      - identity-service
+    networks:
+      - split-network
+
+  # 5. API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+      - identity-service
+      - expense-service
+    networks:
+      - split-network
+
+networks:
+  split-network:
+    driver: bridge
