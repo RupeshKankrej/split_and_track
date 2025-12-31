@@ -32,9 +32,12 @@ services:
     environment:
       # Override localhost with container names
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/splittracker
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-registry:8761/eureka/
       - SPRING_MAIL_USERNAME=rupeshrk1206@gmail.com # Ensure these are set if not in application.yml
       - SPRING_MAIL_PASSWORD=abcd1234efgh5678
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     depends_on:
       - postgres
       - service-registry
@@ -50,7 +53,10 @@ services:
     environment:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-registry:8761/eureka/
       # If you separate DBs later, change URL here
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/splittracker 
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/splittracker
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     depends_on:
       - postgres
       - service-registry
@@ -70,6 +76,75 @@ services:
       - service-registry
       - identity-service
       - expense-service
+    networks:
+      - split-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - split-network
+  
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - split-network
+  
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_MAIL_USERNAME: rupeshrk1206@gmail.com 
+      SPRING_MAIL_PASSWORD: abcd1234efgh5678
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/splittracker
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: password
+      # Auto-create the table
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    depends_on:
+      - service-registry
+      - kafka
+    networks:
+      - split-network
+  
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - split-network
+
+  audit-service:
+    build: ./audit-service
+    container_name: audit-service
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/splittracker
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      - postgres
+      - kafka
+      - service-registry
     networks:
       - split-network
 

@@ -13,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,8 @@ public class ExpenseService {
     private UserClient userClient;
     @Autowired
     private GroupRepository groupRepository;
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     private Map<Long, UserDTO> fetchUserMap(Set<Long> userIds) {
         if (userIds.isEmpty())
@@ -97,6 +100,47 @@ public class ExpenseService {
             expenseSplit.setExpense(expense);
             expenseSplit.setAmountOwed(split.getAmount());
             expenseSplitRepository.save(expenseSplit);
+        }
+
+        try {
+            UserDTO payer = userClient.getUser(request.getUserId());
+            System.out.println("Payer found: " + payer.getName());
+
+            for (SplitDefinition split : request.getSplits()) {
+                System.out.println("Checking split for UserID: " + split.getUserId());
+
+                // Logic: Don't notify the payer, notify everyone else
+                if (!split.getUserId().equals(payer.getId())) {
+                    String json = String.format(
+                            "{\"targetUserId\": %d, \"amount\": %.2f, \"payerName\": \"%s\"}",
+                            split.getUserId(),
+                            split.getAmount(),
+                            payer.getName());
+
+                    System.out.println("Attempting to send to Kafka: " + json);
+                    kafkaTemplate.send("expense-added-topic", json);
+                    System.out.println("SUCCESS: Sent to Kafka");
+                } else {
+                    System.out.println("Skipping notification: User is the payer.");
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("CRITICAL ERROR sending notification: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        try {
+            String description = "You added'" + request.getDescription() + "' for " + request.getAmount();
+
+            String auditJson = String.format(
+                    "{\"userId\": %d, \"action\": \"EXPENSE_ADDED\", \"description\": \"%s\"}",
+                    request.getUserId(),
+                    description);
+
+            kafkaTemplate.send("activity-log-topic", auditJson);
+            System.out.println("Sent Audit Log to Kafka");
+        } catch (Exception e) {
+            System.err.println("Error sending audit log: " + e.getMessage());
         }
 
     }

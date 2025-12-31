@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import com.expense.expenseservice.client.UserClient;
@@ -27,6 +28,9 @@ public class GroupController {
 
     @Autowired
     private UserClient userClient;
+
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     @PostMapping("/create")
     public ResponseEntity<Group> createGroup(@RequestBody Map<String, Object> payload) {
@@ -52,7 +56,22 @@ public class GroupController {
         }
 
         group.setMemberIds(memberIds);
-        return ResponseEntity.ok(groupRepo.save(group));
+        Group savedGroup = groupRepo.save(group);
+        List<UserDTO> members = userClient.getUsersByIds(memberIds);
+        UserDTO admin = userClient.getUser(adminId);
+        for (UserDTO member : members) {
+            if (member.getId().equals(adminId))
+                continue;
+            String name1 = member.getName();
+            String groupName = savedGroup.getName();
+            String json = String.format(
+                    "{\"name\": \"%s\", \"groupName\": \"%s\", \"addedBy\": \"%s\" \"targetUserId\": %d}",
+                    name1,
+                    groupName,
+                    admin.getName(), member.getId());
+            kafkaTemplate.send("group-add-topic", json);
+        }
+        return ResponseEntity.ok(savedGroup);
     }
 
     @PostMapping("/{groupId}/addMembers")

@@ -1,137 +1,189 @@
-# Split & Track - Microservices Backend
+# 💰 Split Tracker - Distributed Microservices Expense Manager
 
-   
+> A scalable, event-driven microservices application for splitting expenses with friends. Built with **Spring Boot 3**, **Apache Kafka**, **PostgreSQL**, and **Flutter**.
 
-**Split & Track** is a distributed expense splitting system (similar to Splitwise) built using a scalable **Microservices Architecture**. It enables users to create groups, split expenses (equally or unequally), and settle debts efficiently.
+## 📖 Overview
 
-The system is decomposed into domain-driven services, orchestrated via **Netflix Eureka** and accessible through a unified **API Gateway**.
+**Split Tracker** is a full-stack solution that solves the problem of tracking shared expenses. Unlike a monolithic app, this project demonstrates a **fully distributed architecture** designed for high availability and fault tolerance.
 
-## 🏗️ System Architecture
+It uses **Apache Kafka** for asynchronous communication (notifications & auditing) to ensure the main user flow remains fast and non-blocking, even under load.
 
-The application is split into the following independent microservices:
+---
 
-| Service Name | Port | Responsibility |
-| :--- | :--- | :--- |
-| **Service Registry** | `8761` | Netflix Eureka Server for Service Discovery. |
-| **API Gateway** | `8080` | Single entry point. Handles routing (`/api/auth` -\> Identity, `/api/groups` -\> Expense) and load balancing. |
-| **Identity Service** | `8081` | Manages User Registration, Login, JWT Generation, and "Shadow Account" invitations. |
-| **Expense Service** | `8082` | Core logic for Groups, Expenses, Splits, and Balance Calculation. |
-| **PostgreSQL** | `5432` | Relational database sharing data storage (logical separation via schemas/tables). |
+## 🏗️ Architecture
 
-### Infrastructure Diagram
+The system is composed of **5 core microservices** and independent infrastructure components.
 
-```mermaid
-graph TD
-    Client[Flutter Mobile App] --> Gateway[API Gateway :8080]
-    Gateway --> Eureka[Service Registry :8761]
-    Gateway --> Identity[Identity Service :8081]
-    Gateway --> Expense[Expense Service :8082]
-    
-    Expense -- Feign Client (Batch Fetch) --> Identity
-    
-    Identity --> DB[(PostgreSQL)]
-    Expense --> DB
-```
+| Service | Port | Description |
+| --- | --- | --- |
+| **API Gateway** | `8080` | Entry point. Handles routing and load balancing. |
+| **Service Registry** | `8761` | Eureka Server for dynamic service discovery. |
+| **Identity Service** | `8081` | Manages users and authentication. |
+| **Expense Service** | `8082` | Core logic. Handles splits and produces Kafka events. |
+| **Notification Service** | Random | Consumes Kafka events to send push notifications (FCM). |
+| **Audit Service** | `8084` | Consumes Kafka events to log user activity for compliance. |
+| **Zipkin** | `9411` | Distributed tracing UI. |
+
+---
 
 ## 🚀 Key Features
 
-  * **Microservices Architecture:** Fully decoupled services allowing independent scaling and deployment.
-  * **Centralized Routing:** Spring Cloud Gateway routes traffic dynamically based on service registration status.
-  * **Distributed Security:** Stateless authentication using JWT. Secure inter-service communication achieved via custom **Feign Request Interceptors** that propagate tokens downstream.
-  * **Performance Optimization:** Solved the N+1 network latency problem in balance calculations by implementing a **Batch Data Fetching** pattern, reducing inter-service calls by \~95% for large groups.
-  * **Shadow Accounts (Lazy Registration):** Users can invite friends via email. The system creates a "Shadow Account" that merges automatically when the user officially registers later.
-  * **Complex Splitting:** Supports Equal and Unequal expense splitting logic.
+* **Microservices Architecture:** Fully decoupled services using REST and Feign Clients.
+* **Event-Driven Design:** Uses **Kafka** to decouple high-latency tasks (Notifications, Auditing) from critical user paths.
+* **Service Discovery:** Dynamic scaling using **Netflix Eureka**.
+* **Distributed Tracing:** Full observability with **Micrometer** and **Zipkin** to track requests across service boundaries.
+* **Mobile First:** Native Android/iOS app built with **Flutter**.
+* **Resilience:** Dockerized environment ensuring consistent behavior across Dev and Prod.
+
+---
 
 ## 🛠️ Tech Stack
 
-  * **Language:** Java 17
-  * **Framework:** Spring Boot 3
-  * **Cloud Stack:** Spring Cloud (Gateway, Eureka, OpenFeign)
-  * **Database:** PostgreSQL
-  * **Containerization:** Docker & Docker Compose
-  * **Build Tool:** Maven (Multi-Module Project)
+### Backend
 
-## ⚙️ Getting Started
+* **Language:** Java 17
+* **Framework:** Spring Boot 3 (Web, Data JPA, Cloud)
+* **Messaging:** Apache Kafka, Zookeeper
+* **Database:** PostgreSQL
+* **Observability:** Micrometer Tracing, Zipkin
+* **Build Tool:** Maven
+
+### Frontend
+
+* **Framework:** Flutter (Dart)
+* **State Management:** `setState` (Clean & Simple) / Provider
+* **Integrations:** Firebase Cloud Messaging (FCM)
+
+### DevOps & Infrastructure
+
+* **Containerization:** Docker & Docker Compose
+* **Gateway:** Spring Cloud Gateway
+* **Registry:** Netflix Eureka
+
+---
+
+## ⚡ Getting Started (The "One-Command" Setup)
+
+You can run the entire backend infrastructure (Database, Kafka, Zookeeper, and all 5 Java Services) with a single command.
 
 ### Prerequisites
 
-  * Docker & Docker Compose
-  * Java 17 JDK (Only if running manually)
-  * Maven
+* Docker Desktop installed & running.
+* Java 17 (optional, if running locally).
+* Flutter SDK (for the mobile app).
 
-### Option 1: Run with Docker (Recommended)
+### 1. Clone the Repository
 
-This spins up the entire ecosystem (Database + 4 Services) with one command.
+```bash
+git clone https://github.com/your-username/split-tracker.git
+cd split-tracker
 
-1.  **Clone the repository:**
-
-    ```bash
-    git clone https://github.com/your-username/split-and-track-backend.git
-    cd split-and-track-backend
-    ```
-
-2.  **Build the JAR artifacts:**
-
-    ```bash
-    mvn clean package -DskipTests
-    ```
-
-3.  **Start the Cluster:**
-
-    ```bash
-    docker-compose up --build
-    ```
-
-4.  **Verify Deployment:**
-
-      * **Eureka Dashboard:** [http://localhost:8761](https://www.google.com/search?q=http://localhost:8761) (Check if all services are UP)
-      * **API Gateway:** [http://localhost:8080](https://www.google.com/search?q=http://localhost:8080)
-
-### Option 2: Run Manually (For Development)
-
-You must start the services in this specific order:
-
-1.  Start local PostgreSQL (`postgres:password` on port 5432).
-2.  Run `ServiceRegistryApplication` (Port 8761).
-3.  Run `IdentityServiceApplication` (Port 8081).
-4.  Run `ExpenseServiceApplication` (Port 8082).
-5.  Run `ApiGatewayApplication` (Port 8080).
-
-## 🔌 API Endpoints
-
-All requests should be sent to the **API Gateway (Port 8080)**.
-
-### Identity Service
-
-  * `POST /api/auth/register` - Create a new account.
-  * `POST /api/auth/login` - Authenticate and get JWT.
-  * `POST /api/users/invite` - Invite a user via email (Shadow Account).
-
-### Expense Service
-
-  * `GET /api/groups/user/{userId}` - Get all groups for a user.
-  * `POST /api/groups/create` - Create a new group.
-  * `POST /api/expenses` - Add a new expense (Equal/Unequal split).
-  * `GET /api/groups/{groupId}/balances/{userId}` - Get net balances (Who owes whom).
-
-## 📝 Configuration
-
-### Environment Variables
-
-The `docker-compose.yml` file handles most configuration. However, if you want to enable Email Notifications, update the `identity-service` environment variables:
-
-```yaml
-    environment:
-      - SPRING_MAIL_USERNAME=your-email@gmail.com
-      - SPRING_MAIL_PASSWORD=your-app-password
 ```
 
-## 🔮 Future Roadmap
+### 2. Run with Docker Compose
 
-  * [ ] **Notification Service:** Decouple email sending using Apache Kafka.
-  * [ ] **Resilience:** Implement Circuit Breakers (Resilience4j) for Identity Service downtime.
-  * [ ] **Monitoring:** Add Distributed Tracing with Zipkin/Micrometer.
+```bash
+docker-compose up --build -d
 
------
+```
 
-*Built by Rupesh | 2025*
+*Wait for a few minutes for the images to build and services to register.*
+
+### 3. Verify Deployment
+
+* **Service Registry (Eureka):** Visit `http://localhost:8761`. You should see `IDENTITY-SERVICE`, `EXPENSE-SERVICE`, etc., registered.
+* **Zipkin (Tracing):** Visit `http://localhost:9411` to view trace dashboards.
+* **API Gateway:** The backend is accessible at `http://localhost:8080`.
+
+---
+
+## 📱 Running the Mobile App
+
+1. Navigate to the flutter folder:
+```bash
+cd expense_tracker_app
+
+```
+
+
+2. Install dependencies:
+```bash
+flutter pub get
+
+```
+
+
+3. **Important:** Update the `baseUrl` in `lib/main.dart` or `lib/utils/api_client.dart` to your machine's local IP address (e.g., `192.168.1.5`). **Do not use `localhost**` if testing on a physical device.
+4. Run the app:
+```bash
+flutter run
+
+```
+
+
+
+---
+
+## 🧪 API Endpoints (Quick Reference)
+
+You can test these via Postman or Curl.
+
+**1. Create User (Identity Service)**
+
+```http
+POST http://localhost:8080/users/invite
+Content-Type: application/json
+
+{
+  "name": "Rupesh",
+  "email": "rupesh@example.com"
+}
+
+```
+
+**2. Add Expense (Expense Service)**
+
+```http
+POST http://localhost:8080/expenses
+Content-Type: application/json
+
+{
+  "description": "Lunch at Taco Bell",
+  "amount": 50.0,
+  "userId": 1,
+  "splits": [
+    { "userId": 2, "amount": 25.0 }
+  ]
+}
+
+```
+
+*(This triggers a Kafka event → Notification Service → Mobile Push)*
+
+**3. View Audit Log (Audit Service)**
+
+```http
+GET http://localhost:8080/audit/1
+
+```
+
+---
+
+## 🔮 Future Improvements
+
+* [ ] **Graphs:** Visual spending analytics in Flutter.
+
+---
+
+## 👤 Author
+
+**Rupesh**
+
+* [LinkedIn](https://linkedin.com/in/rupesh-kankrej-20228a21a)
+* [GitHub](https://github.com/RupeshKankrej)
+
+---
+
+### ⭐ Show your support
+
+Give a ⭐️ if this project helped you!

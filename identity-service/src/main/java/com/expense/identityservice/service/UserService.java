@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import com.expense.identityservice.dto.UserDTO;
@@ -18,6 +19,11 @@ public class UserService {
     public UserRepository userRepo;
     @Autowired
     public EmailService emailService;
+
+    @Autowired
+    public KafkaTemplate<String, String> kafkaTemplate;
+
+    private static final String TOPIC = "user-invite-topic";
 
     public UserDTO getUserById(Long userId) {
         return userRepo.findById(userId).map(this::mapToDTO).orElse(null);
@@ -45,8 +51,8 @@ public class UserService {
 
         User savedUser = userRepo.save(newUser);
 
-        // Disabled for now
-        // emailService.sendInviteEmail(email, name);
+        String message = String.format("{\"email:\"%s\", \"name\":\"%s\"}", email, name);
+        kafkaTemplate.send(TOPIC, message);
 
         return mapToDTO(savedUser);
     }
